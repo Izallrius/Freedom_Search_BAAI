@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 from sqlalchemy import create_engine, func, desc
 from sqlalchemy.orm import sessionmaker, scoped_session
 from database.models import CrawledPage, crawler_engine, pg_engine, IndexedPage
-from sentence_transformers import SentenceTransformer
+import requests
 from dotenv import load_dotenv
 import time
 import json
@@ -22,20 +22,36 @@ crawler_session = scoped_session(sessionmaker(bind=crawler_engine))
 # Create database session for PostgreSQL (Neon)
 pg_session = scoped_session(sessionmaker(bind=pg_engine))
 
-# Initialize embedding model at startup (loaded once, used for all queries)
-MODEL_NAME = 'BAAI/bge-small-en-v1.5'
-MODEL_PATH = os.path.join(BASE_DIR, "models", "bge-small-en-v1.5")
+# Hugging Face Inference API Configuration
+MODEL_ID = "BAAI/bge-small-en-v1.5"
+API_URL = f"https://router.huggingface.co/hf-inference/models/{MODEL_ID}"
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
-if not os.path.exists(MODEL_PATH):
-    print(f"🚀 Downloading {MODEL_NAME} embedding model at startup (first time)...")
-    embedding_model = SentenceTransformer(MODEL_NAME)
-    print(f"✓ Model downloaded. Saving to {MODEL_PATH} for future use...")
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-    embedding_model.save(MODEL_PATH)
-else:
-    print(f"🚀 Loading embedding model from local storage: {MODEL_PATH}")
-    embedding_model = SentenceTransformer(MODEL_PATH)
-print("✓ Embedding model loaded successfully!")
+def get_embedding(text):
+    """Get embedding for a single text using Hugging Face Inference API."""
+    if not HF_TOKEN or HF_TOKEN == "your_huggingface_token_here":
+        raise ValueError("HUGGINGFACE_TOKEN not set in .env file")
+        
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    # For BGE models, queries should be prefixed with an instruction
+    instruction = "Represent this sentence for searching relevant passages: "
+    payload = {"inputs": f"{instruction}{text}", "options": {"wait_for_model": True}}
+    
+    response = requests.post(API_URL, headers=headers, json=payload)
+    
+    if response.status_code != 200:
+        raise Exception(f"Hugging Face API error: {response.status_code} - {response.text}")
+        
+    result = response.json()
+    
+    # Handle potential nested list response (e.g., if API returns batch result)
+    if isinstance(result, list) and len(result) > 0:
+        if isinstance(result[0], list):
+            # If it's [[[...]]] (token embeddings), we might need pooling, 
+            # but usually for feature-extraction on sentence-transformers it's [[...]]
+            return result[0]
+    
+    return result
 
 @app.route('/')
 def home():
@@ -101,8 +117,8 @@ def search():
     start_time = time.time()
 
     try:
-        # Generate embedding for the query using the pre-loaded model
-        query_embedding = embedding_model.encode(query, convert_to_numpy=True).tolist()
+        # Generate embedding for the query using the Hugging Face Inference API
+        query_embedding = get_embedding(query)
 
         # Search PostgreSQL for similar documents using pgvector
         # <=> operator is cosine distance. 1 - distance = cosine similarity
