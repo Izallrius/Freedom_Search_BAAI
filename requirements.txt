@@ -12,8 +12,6 @@ requests==2.25.1
 beautifulsoup4==4.9.3
 
 # Semantic Search and Vector Embeddings
-# (Required for local indexer.py; app.py now uses Hugging Face Inference API)
-sentence-transformers==2.2.2
 chromadb
 
 # URL and HTML parsing dependencies
@@ -53,9 +51,6 @@ regex==2024.11.6
 
 # Parallel processing
 joblib==1.4.2
-
-# Numerical computing (required for local indexing)
-numpy==1.24.3
 
 # Type hints support
 typing-extensions==4.12.2
