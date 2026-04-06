@@ -14,8 +14,7 @@ beautifulsoup4==4.9.3
 # Semantic Search and Vector Embeddings
 # (Required for local indexer.py; app.py now uses Hugging Face Inference API)
 sentence-transformers==2.2.2
-chromadb==0.4.22
-torch==2.1.0
+chromadb
 
 # URL and HTML parsing dependencies
 urllib3==1.26.20
